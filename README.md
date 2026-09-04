@@ -15,7 +15,7 @@ Video tutorials show a finished answer. Git history contains the decisions that 
 ## What works
 
 - Import any public GitHub repository from its URL.
-- Read up to six recent commits through GitHub's public API.
+- Read up to eight recent commits through GitHub's public API.
 - Find a readable source file changed by each commit.
 - Load the file exactly as it existed at that commit.
 - Highlight lines that differ from the previous checkpoint when both commits use the same file.
@@ -28,8 +28,8 @@ Video tutorials show a finished answer. Git history contains the decisions that 
 ## How the import works
 
 1. The URL is parsed into an owner and repository.
-2. CodeReplay requests the six latest commits.
-3. Each commit is inspected for a non-generated source file.
+2. CodeReplay requests the eight latest commits.
+3. Each commit is inspected for readable source files across common web, mobile, systems, and scripting languages.
 4. The file content is fetched at that exact commit SHA.
 5. Usable commits are reversed into chronological lesson checkpoints.
 
@@ -60,7 +60,7 @@ npm run build
 
 - Public repositories only.
 - GitHub's unauthenticated API rate limit applies per visitor.
-- CodeReplay currently chooses the first readable source file in each commit.
+- CodeReplay prefers a small readable production source file in each commit and falls back when a candidate cannot be fetched.
 - Practice verification checks source equality; it does not execute untrusted code.
 - Very large files and generated or lock files are skipped.
 

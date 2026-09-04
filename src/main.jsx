@@ -68,8 +68,8 @@ const seedCheckpoints = [
   },
 ];
 
-const codeExtensions = /\.(?:js|jsx|ts|tsx|py|go|rs|java|rb|php|css|scss|html|vue|svelte)$/i;
-const ignoredFiles = /(?:lock|\.min\.|dist\/|build\/|vendor\/)/i;
+const codeExtensions = /\.(?:c|cc|cpp|cs|css|dart|ex|exs|go|h|hpp|html|java|js|jsx|kt|kts|lua|m|mm|php|py|r|rb|rs|scala|scss|sh|sol|sql|svelte|swift|ts|tsx|vue)$/i;
+const ignoredFiles = /(?:^|\/)(?:dist|build|coverage|vendor|node_modules)\/|(?:^|\/)(?:package-lock|pnpm-lock|yarn\.lock|poetry\.lock|Cargo\.lock)$|\.min\./i;
 
 function normalizeCode(value) {
   return value.replace(/\r\n/g, '\n').trim();
@@ -94,6 +94,43 @@ async function githubJson(url) {
     throw new Error('GitHub could not load this repository right now.');
   }
   return response.json();
+}
+
+async function checkpointFromCommit(commit, index, owner) {
+  const detail = await githubJson(commit.url);
+  const candidates = (detail.files || [])
+    .filter((file) => file.status !== 'removed' && codeExtensions.test(file.filename) && !ignoredFiles.test(file.filename))
+    .sort((a, b) => {
+      const aTest = /(?:^|\/)(?:test|tests|spec|specs)\//i.test(a.filename);
+      const bTest = /(?:^|\/)(?:test|tests|spec|specs)\//i.test(b.filename);
+      return Number(aTest) - Number(bTest) || a.changes - b.changes;
+    });
+
+  for (const file of candidates) {
+    if (!file.contents_url) continue;
+    try {
+      const source = await githubJson(file.contents_url);
+      if (source.type !== 'file' || source.encoding !== 'base64' || !source.content) continue;
+      const rawCode = decodeGithubContent(source.content);
+      if (!rawCode.trim() || rawCode.length > 90000) continue;
+      return {
+        id: String(index + 1).padStart(2, '0'),
+        sha: commit.sha.slice(0, 7),
+        title: commit.commit.message.split('\n')[0].slice(0, 64),
+        change: `${file.changes} lines changed in ${file.filename}`,
+        file: file.filename,
+        author: commit.commit.author?.name || owner,
+        code: rawCode,
+        additions: file.additions,
+        deletions: file.deletions,
+        url: commit.html_url,
+      };
+    } catch {
+      // A single unavailable file should not discard the rest of the commit history.
+    }
+  }
+
+  return null;
 }
 
 function App() {
@@ -154,35 +191,12 @@ function App() {
     setRepoState({ loading: true, error: '', name: `${owner}/${repo}`, url: `https://github.com/${owner}/${repo}` });
 
     try {
-      const commits = await githubJson(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=6`);
-      const imported = await Promise.all(
-        commits.map(async (commit, index) => {
-          const detail = await githubJson(commit.url);
-          const file = detail.files?.find(
-            (candidate) => candidate.status !== 'removed' && codeExtensions.test(candidate.filename) && !ignoredFiles.test(candidate.filename),
-          );
-          if (!file?.contents_url) return null;
-          const source = await githubJson(file.contents_url);
-          if (source.type !== 'file' || !source.content) return null;
-          const rawCode = decodeGithubContent(source.content);
-          if (!rawCode.trim() || rawCode.length > 90000) return null;
-          return {
-            id: String(index + 1).padStart(2, '0'),
-            sha: commit.sha.slice(0, 7),
-            title: commit.commit.message.split('\n')[0].slice(0, 64),
-            change: `${file.changes} lines changed in ${file.filename}`,
-            file: file.filename,
-            author: commit.commit.author?.name || owner,
-            code: rawCode,
-            additions: file.additions,
-            deletions: file.deletions,
-            url: commit.html_url,
-          };
-        }),
-      );
+      const commits = await githubJson(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=8`);
+      const results = await Promise.allSettled(commits.map((commit, index) => checkpointFromCommit(commit, index, owner)));
+      const imported = results.map((result) => result.status === 'fulfilled' ? result.value : null);
 
       const usable = imported.filter(Boolean).reverse();
-      if (!usable.length) throw new Error('No readable source files were found in the latest commits. Try another repository.');
+      if (!usable.length) throw new Error('The latest commits do not contain a readable source file under 90 KB. Try a repository with recent code changes.');
       const lesson = usable.map((point, index) => ({ ...point, id: String(index + 1).padStart(2, '0') }));
       setPoints(lesson);
       setActive(0);
@@ -230,7 +244,10 @@ function App() {
           <input
             id="repo-url"
             value={repoUrl}
-            onChange={(event) => setRepoUrl(event.target.value)}
+            onChange={(event) => {
+              setRepoUrl(event.target.value);
+              if (repoState.error) setRepoState((state) => ({ ...state, error: '' }));
+            }}
             onKeyDown={(event) => event.key === 'Enter' && importRepo()}
             placeholder="github.com/owner/project"
             disabled={repoState.loading}
@@ -242,7 +259,7 @@ function App() {
         </section>
         {repoState.error && <div className="import-error" role="alert"><XCircle size={17} /><span>{repoState.error}</span></div>}
 
-        <section className="player">
+        {!repoState.error && <section className="player">
           <aside className="timeline">
             <div className="timeline-head">
               <div><span>Lesson source</span><h2>{repoState.name}</h2></div>
@@ -319,7 +336,7 @@ function App() {
               <button disabled={active === points.length - 1} onClick={() => openCheckpoint(active + 1)}>Next <ChevronRight size={16} /></button>
             </footer>
           </article>
-        </section>
+        </section>}
       </main>
     </div>
   );

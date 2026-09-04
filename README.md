@@ -6,6 +6,8 @@ CodeReplay turns the latest commits from a public GitHub repository into a short
 
 [Open the live demo](https://codereplay.vercel.app/) · [View the repository](https://github.com/momenbuilds/codereplay)
 
+![CodeReplay project cover](public/codereplay-cover.png)
+
 ## Why it exists
 
 Video tutorials show a finished answer. Git history contains the decisions that produced it, but raw commit pages are difficult for newer developers to learn from. CodeReplay makes that history approachable without inventing explanations or replacing the source with generated code.

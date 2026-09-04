@@ -18,6 +18,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import './styles.css';
+import { checkpointFromCommit, languageLabel, parseGithubUrl } from './github.js';
 
 const exampleRepo = 'https://github.com/moment/moment';
 
@@ -28,6 +29,7 @@ const seedCheckpoints = [
     title: 'Create the greeting',
     change: 'A small component renders the first useful output.',
     file: 'Greeting.jsx',
+    language: 'React JSX',
     author: 'CodeReplay',
     code: `export default function Greeting() {\n  return <h1>Hello, world</h1>\n}`,
     additions: 3,
@@ -39,6 +41,7 @@ const seedCheckpoints = [
     title: 'Make it personal',
     change: 'The component accepts a name instead of hard-coding the message.',
     file: 'Greeting.jsx',
+    language: 'React JSX',
     author: 'CodeReplay',
     code: `export default function Greeting({ name }) {\n  return <h1>Hello, {name}</h1>\n}`,
     additions: 2,
@@ -50,6 +53,7 @@ const seedCheckpoints = [
     title: 'Use it from App',
     change: 'App now renders the component with a real value.',
     file: 'App.jsx',
+    language: 'React JSX',
     author: 'CodeReplay',
     code: `import Greeting from './Greeting'\n\nexport default function App() {\n  return <Greeting name="Momen" />\n}`,
     additions: 5,
@@ -61,6 +65,7 @@ const seedCheckpoints = [
     title: 'Give it structure',
     change: 'A semantic wrapper makes the component ready to style.',
     file: 'App.jsx',
+    language: 'React JSX',
     author: 'CodeReplay',
     code: `import Greeting from './Greeting'\n\nexport default function App() {\n  return (\n    <main className="card">\n      <Greeting name="Momen" />\n    </main>\n  )\n}`,
     additions: 9,
@@ -68,69 +73,24 @@ const seedCheckpoints = [
   },
 ];
 
-const codeExtensions = /\.(?:c|cc|cpp|cs|css|dart|ex|exs|go|h|hpp|html|java|js|jsx|kt|kts|lua|m|mm|php|py|r|rb|rs|scala|scss|sh|sol|sql|svelte|swift|ts|tsx|vue)$/i;
-const ignoredFiles = /(?:^|\/)(?:dist|build|coverage|vendor|node_modules)\/|(?:^|\/)(?:package-lock|pnpm-lock|yarn\.lock|poetry\.lock|Cargo\.lock)$|\.min\./i;
-
 function normalizeCode(value) {
   return value.replace(/\r\n/g, '\n').trim();
-}
-
-function parseGithubUrl(value) {
-  const normalized = value.trim().replace(/^github\.com\//i, 'https://github.com/');
-  const match = normalized.match(/^https?:\/\/github\.com\/([^/]+)\/([^/#?]+?)(?:\.git)?\/?(?:[?#].*)?$/i);
-  return match ? { owner: match[1], repo: match[2] } : null;
-}
-
-function decodeGithubContent(content) {
-  const bytes = Uint8Array.from(atob(content.replace(/\n/g, '')), (character) => character.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
 }
 
 async function githubJson(url) {
   const response = await fetch(url, { headers: { Accept: 'application/vnd.github+json' } });
   if (!response.ok) {
     if (response.status === 404) throw new Error('That repository was not found or is private.');
-    if (response.status === 403) throw new Error('GitHub’s public API limit was reached. Wait a few minutes and try again.');
+    if (response.status === 403) {
+      const resetAt = Number(response.headers.get('x-ratelimit-reset')) * 1000;
+      const retry = resetAt > Date.now()
+        ? ` Try again after ${new Date(resetAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`
+        : ' Try again in about an hour.';
+      throw new Error(`GitHub’s public API limit was reached.${retry}`);
+    }
     throw new Error('GitHub could not load this repository right now.');
   }
   return response.json();
-}
-
-async function checkpointFromCommit(commit, index, owner) {
-  const detail = await githubJson(commit.url);
-  const candidates = (detail.files || [])
-    .filter((file) => file.status !== 'removed' && codeExtensions.test(file.filename) && !ignoredFiles.test(file.filename))
-    .sort((a, b) => {
-      const aTest = /(?:^|\/)(?:test|tests|spec|specs)\//i.test(a.filename);
-      const bTest = /(?:^|\/)(?:test|tests|spec|specs)\//i.test(b.filename);
-      return Number(aTest) - Number(bTest) || a.changes - b.changes;
-    });
-
-  for (const file of candidates) {
-    if (!file.contents_url) continue;
-    try {
-      const source = await githubJson(file.contents_url);
-      if (source.type !== 'file' || source.encoding !== 'base64' || !source.content) continue;
-      const rawCode = decodeGithubContent(source.content);
-      if (!rawCode.trim() || rawCode.length > 90000) continue;
-      return {
-        id: String(index + 1).padStart(2, '0'),
-        sha: commit.sha.slice(0, 7),
-        title: commit.commit.message.split('\n')[0].slice(0, 64),
-        change: `${file.changes} lines changed in ${file.filename}`,
-        file: file.filename,
-        author: commit.commit.author?.name || owner,
-        code: rawCode,
-        additions: file.additions,
-        deletions: file.deletions,
-        url: commit.html_url,
-      };
-    } catch {
-      // A single unavailable file should not discard the rest of the commit history.
-    }
-  }
-
-  return null;
 }
 
 function App() {
@@ -147,6 +107,7 @@ function App() {
   const previous = active > 0 ? points[active - 1] : null;
   const isMatch = normalizeCode(code) === normalizeCode(current.code);
   const progress = Math.round(((active + 1) / points.length) * 100);
+  const languageMix = useMemo(() => [...new Set(points.map((point) => point.language || languageLabel(point.file)))], [points]);
   const sourceLines = current.code.split('\n');
   const previousLines = previous?.file === current.file ? previous.code.split('\n') : [];
   const changedLines = useMemo(
@@ -192,11 +153,11 @@ function App() {
 
     try {
       const commits = await githubJson(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=8`);
-      const results = await Promise.allSettled(commits.map((commit, index) => checkpointFromCommit(commit, index, owner)));
+      const results = await Promise.allSettled(commits.map((commit, index) => checkpointFromCommit(commit, index, owner, githubJson)));
       const imported = results.map((result) => result.status === 'fulfilled' ? result.value : null);
 
       const usable = imported.filter(Boolean).reverse();
-      if (!usable.length) throw new Error('The latest commits do not contain a readable source file under 90 KB. Try a repository with recent code changes.');
+      if (!usable.length) throw new Error('The latest commits do not contain a readable UTF-8 text file under 90 KB. Try a repository with recent source changes.');
       const lesson = usable.map((point, index) => ({ ...point, id: String(index + 1).padStart(2, '0') }));
       setPoints(lesson);
       setActive(0);
@@ -254,16 +215,36 @@ function App() {
           />
           <button className="example-button" onClick={() => importRepo(exampleRepo)} disabled={repoState.loading}>Try an example</button>
           <button className="import-button" onClick={() => importRepo()} disabled={repoState.loading}>
-            {repoState.loading ? <><LoaderCircle className="spin" size={16} /> Reading commits</> : <>Build lesson <ChevronRight size={16} /></>}
+            {repoState.loading ? <><LoaderCircle className="spin" size={16} /> Scanning history</> : <>Build lesson <ChevronRight size={16} /></>}
           </button>
         </section>
         {repoState.error && <div className="import-error" role="alert"><XCircle size={17} /><span>{repoState.error}</span></div>}
 
-        {!repoState.error && <section className="player">
+        {repoState.loading && (
+          <section className="loading-panel" aria-live="polite">
+            <div className="scan-mark"><GitCommitHorizontal size={22} /></div>
+            <div><strong>Reading the repository history</strong><span>Checking recent commits for safe, readable text source.</span></div>
+            <div className="scan-line"><span /></div>
+          </section>
+        )}
+
+        {!repoState.loading && !repoState.error && repoState.url && (
+          <div className="import-summary" role="status">
+            <Check size={16} />
+            <strong>{points.length} checkpoints ready</strong>
+            <span>{languageMix.join(', ')}</span>
+            <a href={repoState.url} target="_blank" rel="noreferrer">Open repository <ExternalLink size={13} /></a>
+          </div>
+        )}
+
+        {!repoState.loading && !repoState.error && <section className="player">
           <aside className="timeline">
             <div className="timeline-head">
               <div><span>Lesson source</span><h2>{repoState.name}</h2></div>
-              {repoState.url && <a href={repoState.url} target="_blank" rel="noreferrer" aria-label="Open repository"><ExternalLink size={16} /></a>}
+              <div className="source-tools">
+                <span className="language-chip">{current.language || languageLabel(current.file)}</span>
+                {repoState.url && <a href={repoState.url} target="_blank" rel="noreferrer" aria-label="Open repository"><ExternalLink size={16} /></a>}
+              </div>
             </div>
 
             <div className="lesson-progress">

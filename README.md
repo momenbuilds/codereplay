@@ -16,7 +16,7 @@ Video tutorials show a finished answer. Git history contains the decisions that 
 
 - Import any public GitHub repository from its URL.
 - Read up to eight recent commits through GitHub's public API.
-- Find a readable source file changed by each commit.
+- Find readable UTF-8 source without relying on a language allowlist.
 - Load the file exactly as it existed at that commit.
 - Highlight lines that differ from the previous checkpoint when both commits use the same file.
 - Open the original repository or commit for verification.
@@ -29,7 +29,7 @@ Video tutorials show a finished answer. Git history contains the decisions that 
 
 1. The URL is parsed into an owner and repository.
 2. CodeReplay requests the eight latest commits.
-3. Each commit is inspected for readable source files across common web, mobile, systems, and scripting languages.
+3. Each commit is inspected for readable UTF-8 text, so new and uncommon programming languages work without an extension update.
 4. The file content is fetched at that exact commit SHA.
 5. Usable commits are reversed into chronological lesson checkpoints.
 
@@ -62,7 +62,18 @@ npm run build
 - GitHub's unauthenticated API rate limit applies per visitor.
 - CodeReplay prefers a small readable production source file in each commit and falls back when a candidate cannot be fetched.
 - Practice verification checks source equality; it does not execute untrusted code.
-- Very large files and generated or lock files are skipped.
+- Binary formats, invalid UTF-8, very large files, generated output, dependencies, and lock files are skipped.
+
+## Verification
+
+Run the automated checks with:
+
+```bash
+npm test
+npm run build
+```
+
+The source-detection tests cover representative web, mobile, systems, data, smart-contract, scripting, and compiled-language filenames. They also include an unknown future extension to verify that language support is content-based rather than tied to a fixed list.
 
 These constraints keep the public demo fast, private, and safe. A production expansion could add GitHub OAuth, file selection, commit ranges, syntax-aware diffs, and sandboxed tests.
 

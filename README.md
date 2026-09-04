@@ -4,7 +4,7 @@
 
 CodeReplay turns the latest commits from a public GitHub repository into a short, hands-on lesson. Learners can move through real source changes, see which lines changed, recreate a checkpoint, and verify their work against the original commit.
 
-[Open the live demo](https://momenbuilds.github.io/codereplay/) · [View the repository](https://github.com/momenbuilds/codereplay)
+[Open the live demo](https://codereplay.vercel.app/) · [View the repository](https://github.com/momenbuilds/codereplay)
 
 ## Why it exists
 
@@ -52,7 +52,7 @@ npm run build
 - Vite
 - GitHub REST API
 - Lucide icons
-- GitHub Pages and GitHub Actions
+- Vercel
 
 ## Current limits
 

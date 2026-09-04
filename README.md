@@ -1,20 +1,69 @@
 # CodeReplay
 
-CodeReplay is a focused tutorial replay workspace. It turns a short sequence of commits into checkpoints you can inspect, edit, and verify instead of passively watching a video.
+**Replay the decisions, not another tutorial.**
 
-## Demo
+CodeReplay turns the latest commits from a public GitHub repository into a short, hands-on lesson. Learners can move through real source changes, see which lines changed, recreate a checkpoint, and verify their work against the original commit.
 
-1. Run `npm install`
-2. Run `npm run dev`
-3. Open the local URL shown by Vite.
-4. Use **Load a public GitHub repo** to pull the latest four public commits from any repository. No GitHub token is required.
-5. Select a checkpoint, choose **Practice**, edit the code, and choose **Check my code**.
+[Open the live demo](https://momenbuilds.github.io/codereplay/) · [View the repository](https://github.com/momenbuilds/codereplay)
 
-The GitHub import intentionally keeps the demo safe and lightweight: commit metadata is live, while the starter snippets remain editable lesson fixtures until a server-side source mapper is added.
+## Why it exists
 
-## Production notes
+Video tutorials show a finished answer. Git history contains the decisions that produced it, but raw commit pages are difficult for newer developers to learn from. CodeReplay makes that history approachable without inventing explanations or replacing the source with generated code.
 
-- No secrets are stored in the browser or repository.
-- The app is a static Vite build and can be hosted on any static host.
-- GitHub API errors and invalid URLs are shown inline.
-- `npm run build` creates the deployable `dist/` directory.
+## What works
+
+- Import any public GitHub repository from its URL.
+- Read up to six recent commits through GitHub's public API.
+- Find a readable source file changed by each commit.
+- Load the file exactly as it existed at that commit.
+- Highlight lines that differ from the previous checkpoint when both commits use the same file.
+- Open the original repository or commit for verification.
+- Switch to Practice mode, edit the source, and check for an exact match.
+- Restore the source after a failed attempt.
+- Use the built-in lesson or load a real example with one click.
+- Navigate by keyboard and use the interface on mobile layouts.
+
+## How the import works
+
+1. The URL is parsed into an owner and repository.
+2. CodeReplay requests the six latest commits.
+3. Each commit is inspected for a non-generated source file.
+4. The file content is fetched at that exact commit SHA.
+5. Usable commits are reversed into chronological lesson checkpoints.
+
+Everything happens in the browser. There is no database, account system, server, GitHub token, or AI-generated replacement code.
+
+## Run locally
+
+```bash
+npm install
+npm run dev
+```
+
+Create a production build with:
+
+```bash
+npm run build
+```
+
+## Stack
+
+- React
+- Vite
+- GitHub REST API
+- Lucide icons
+- GitHub Pages and GitHub Actions
+
+## Current limits
+
+- Public repositories only.
+- GitHub's unauthenticated API rate limit applies per visitor.
+- CodeReplay currently chooses the first readable source file in each commit.
+- Practice verification checks source equality; it does not execute untrusted code.
+- Very large files and generated or lock files are skipped.
+
+These constraints keep the public demo fast, private, and safe. A production expansion could add GitHub OAuth, file selection, commit ranges, syntax-aware diffs, and sandboxed tests.
+
+## Privacy and safety
+
+Repository data is requested directly from GitHub and remains in the visitor's browser session. CodeReplay does not collect code, credentials, or personal data. It never executes imported repository code.
